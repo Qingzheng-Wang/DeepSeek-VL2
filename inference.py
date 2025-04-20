@@ -62,7 +62,7 @@ def load_pil_images(conversations: List[Dict[str, str]]) -> List[PIL.Image.Image
 
 def main(args):
 
-    dtype = torch.bfloat16
+    dtype = torch.float16
 
     # specify the path to the model
     model_path = args.model_path
@@ -75,6 +75,8 @@ def main(args):
         torch_dtype=dtype
     )
     vl_gpt = vl_gpt.cuda().eval()
+
+    print(f"model: {vl_gpt}")
 
     # multiple images conversation example
     # Please note that <|grounding|> token is specifically designed for the grounded caption feature. It is not needed for normal conversations.
@@ -157,7 +159,7 @@ def main(args):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True,
-                        default="deepseek-ai/deepseek-vl2",
+                        default="deepseek-ai/deepseek-vl2-tiny",
                         help="model name or local path to the model")
     parser.add_argument("--chunk_size", type=int, default=-1,
                         help="chunk size for the model for prefiiling. "
