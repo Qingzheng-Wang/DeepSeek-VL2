@@ -76,7 +76,7 @@ def main(args):
     )
     vl_gpt = vl_gpt.cuda().eval()
 
-    print(f"model: {vl_gpt}")
+    # print(f"model: {vl_gpt}")
 
     # multiple images conversation example
     # Please note that <|grounding|> token is specifically designed for the grounded caption feature. It is not needed for normal conversations.

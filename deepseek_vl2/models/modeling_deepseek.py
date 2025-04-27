@@ -1130,9 +1130,13 @@ class DeepseekV2AttentionTriton(nn.Module):
         #                 torch.matmul(q_nope, compressed_kv.unsqueeze(-3).mT)) * self.softmax_scale
         kernel_dtype = tl.float16 if hidden_states.dtype == torch.float16 else tl.float32
         attn_weights = fused_qk_attention(
-            q_nope, q_pe, compressed_kv, k_pe, self.softmax_scale, 
+            q_nope.permute(0, 2, 1, 3), # [b, h, l, k] -> [b, l, h, k]
+            q_pe.permute(0, 2, 1, 3), # [b, h, l, r] -> [b, l, h, r]
+            compressed_kv, # [b, t, k]
+            k_pe.squeeze(1), # [b, 1, t, r] -> [b, t, r]
+            self.softmax_scale, 
             kernel_version=2, dtype=kernel_dtype
-        )
+        ).permute(0, 2, 1, 3) # [b, l, h, t] -> [b, h, l, t]
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
@@ -1145,7 +1149,13 @@ class DeepseekV2AttentionTriton(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             # attn_weights = attn_weights + attention_mask
-            attn_weights = fused_mask_softmax(attn_weights, attention_mask)
+            attn_weights = attn_weights.permute(0, 2, 1, 3) # [b, h, l, t] -> [b, l, h, t]
+            fused_mask_softmax(
+                attn_weights, 
+                attention_mask.permute(0, 2, 1, 3) # [b, 1, l, t] -> [b, l, 1, t]
+            )
+
+            attn_weights = attn_weights.permute(0, 2, 1, 3) # [b, l, h, t] -> [b, h, l, t]
 
         # upcast attention to fp32
         # attn_weights = nn.functional.softmax(
@@ -1458,7 +1468,8 @@ ATTENTION_CLASSES = {
     "eager": DeepseekV2Attention,
     "flash_attention_2": DeepseekV2FlashAttention2,
 
-    "mla_eager": DeepseekV2Attention,
+    # "mla_eager": DeepseekV2Attention,
+    "mla_eager": DeepseekV2AttentionTriton,
     "mla_flash_attention_2": DeepseekV2FlashAttention2,
 
     "mha_eager": LlamaAttention,
@@ -1470,7 +1481,6 @@ class DeepseekV2DecoderLayer(nn.Module):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         if config.use_mla:
             attn_implementation = "mla_" + config._attn_implementation
         else:

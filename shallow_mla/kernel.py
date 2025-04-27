@@ -251,7 +251,9 @@ def fused_qk_attention_kernel_2(
     mask_l = offs_l < L
     mask_t = offs_t < T
 
-    accumulator = tl.zeros((BLOCK_L, BLOCK_T), dtype=dtype)
+    # tl.dot for 2 fp16 tensors will return a fp32 tensor, 
+    # so for accumulator, we need to use fp32
+    accumulator = tl.zeros((BLOCK_L, BLOCK_T), dtype=tl.float32)
 
     # q_nrope_absorb kv_latent_cache
     for k_off in range(0, K, BLOCK_K):
@@ -675,6 +677,7 @@ def fused_rms_norm(x, normalized_shape, weight, epsilon=1e-6):
         stride_out_dim=stride_out_dim,
         stride_weight=stride_weight,
         epsilon=epsilon,
+        BLOCK_SIZE=DEFAULT_BLOCK_SIZE,
     )
 
     return out
